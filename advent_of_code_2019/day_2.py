@@ -71,9 +71,7 @@ class Day2Tests(unittest.TestCase):
         self.assertEqual(run_intcode_program([1, 1, 1, 4, 99, 5, 6, 0, 99]), [30, 1, 1, 4, 2, 5, 6, 0, 99])
 
 
-def main():
-    txt_path = Path(Path(__file__).parent, 'input_data', 'day_2_input.txt')
-
+def day_2(txt_path: Path) -> List[int]:
     # Load puzzle input as List[int]
     with open(str(txt_path), mode='r', newline='') as f:
         base_intcode = [int(x) for x in f.readline().split(',')]
@@ -88,7 +86,7 @@ def main():
     result_data = run_intcode_program(intcode=intcode)
 
     # What value is left at position 0 after the program halts?
-    print(f'Part 1 answer: {result_data[0]}')
+    part_1_answer = result_data[0]
 
     # Part 2
     # Determine what pair of inputs produces the output 19690720. What is 100 * noun + verb?
@@ -107,12 +105,23 @@ def main():
             if result == expected_output:
                 match_found = True
                 answer = 100 * noun + verb
-                print(f'Part 2 answer: {answer}')
+                part_2_answer = answer
+                break
         if match_found:
             break
+    else:
+        part_2_answer = None
+
+    return [part_1_answer, part_2_answer]
+
+
+def main():
+    txt_path = Path(Path(__file__).parent, 'input_data', 'day_2_input.txt')
+    answer = day_2(txt_path=txt_path)
+    print(f'Day 1 Answers: {repr(answer)}')
 
 
 if __name__ == '__main__':
-    # SUITE = unittest.TestLoader().loadTestsFromTestCase(Day2Tests)
-    # unittest.TextTestRunner(verbosity=2).run(SUITE)
+    SUITE = unittest.TestLoader().loadTestsFromTestCase(Day2Tests)
+    unittest.TextTestRunner(verbosity=2).run(SUITE)
     main()
