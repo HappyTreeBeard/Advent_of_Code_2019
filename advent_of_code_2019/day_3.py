@@ -44,7 +44,6 @@ class WireVector(object):
 class WirePoint(object):
     x: float
     y: float
-    # t: Optional[int] = None
     t_list: List[int] = dataclasses.field(default_factory=list)
 
     @property
@@ -108,12 +107,6 @@ class WireSegment(object):
                 return WirePoint(x=x, y=y, t_list=t_list)
         return None
 
-    def overlapped_segment(self, other):  # -> Optional[WireSegment]:  # :(
-        assert isinstance(other, WireSegment)
-        if self.a == other.a:
-            pass
-        pass
-
 
 def build_segments_from_vectors(vector_list: List[WireVector]) -> List[WireSegment]:
     x = 0
@@ -134,7 +127,6 @@ def build_segments_from_vectors(vector_list: List[WireVector]) -> List[WireSegme
         segment_list.append(segment)
 
     return segment_list
-
 
 
 def find_intersection_points(segments_0: List[WireSegment], segments_1: List[WireSegment]) -> List[WirePoint]:
@@ -198,14 +190,6 @@ def find_intersection_loops(segments_0: List[WireSegment], segments_1: List[Wire
     return wire_loop_list
 
 
-def string_to_vector_list(vector_list_str: str) -> List[WireVector]:
-    wire_vector_list = []
-    for vector_str in vector_list_str.split(','):
-        vector = WireVector.build_from_string(value=vector_str)
-        wire_vector_list.append(vector)
-    return wire_vector_list
-
-
 class Day3Tests(unittest.TestCase):
 
     def test_wire_vector(self):
@@ -243,13 +227,6 @@ class Day3Tests(unittest.TestCase):
         segment_1 = WireSegment(x0=0, y0=3, x1=0, y1=6)
         x_point = segment_0.intersection(other=segment_1)
         self.assertIsNone(x_point)
-        # self.assertEqual(x_point.x, 2)
-        # self.assertEqual(point.b, 1)
-        # y0 = point.m * point.x0 + point.b
-        # self.assertEqual(y0, point.y0)
-        #
-        # y1 = point.m * point.x1 + point.b
-        # self.assertEqual(y1, point.y1)
 
     def test_segment_intersect_1(self):
         self.assertIsNone(
