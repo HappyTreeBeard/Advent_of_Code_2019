@@ -95,6 +95,7 @@ def day_2(txt_path: Path) -> List[int]:
     # verb. Each of the two input values will be between 0 and 99, inclusive.
     expected_output = 19690720
     match_found = False
+    part_2_answer = None
     for noun in range(99):
         for verb in range(99):
             intcode = copy.copy(base_intcode)
@@ -109,8 +110,6 @@ def day_2(txt_path: Path) -> List[int]:
                 break
         if match_found:
             break
-    else:
-        part_2_answer = None
 
     return [part_1_answer, part_2_answer]
 
