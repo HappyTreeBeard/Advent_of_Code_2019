@@ -111,6 +111,7 @@ class IntCodeProgram(object):
         return diagnostic_code
 
     def read_parameter_value(self, parameter_value: int, mode: ParameterMode) -> int:
+        # Resolve the parameter value based on the ParameterMode
         if mode == ParameterMode.IMMEDIATE:
             return parameter_value
         elif mode == ParameterMode.POSITION:
