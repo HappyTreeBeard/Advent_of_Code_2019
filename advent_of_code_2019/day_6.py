@@ -1,7 +1,6 @@
 import unittest
-from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, DefaultDict
 
 from dataclasses import dataclass, field
 
@@ -20,19 +19,36 @@ class OrbitalNode(object):
     satellites: List['OrbitalNode'] = field(default_factory=list)
 
 
-class OrbitalNodeDict(defaultdict):
-    """Override defaultdict so a OrbitalNode is created if the key is missing from the dictionary."""
+class OrbitalNodeDict(DefaultDict[str, OrbitalNode]):
+    """Override defaultdict so a OrbitalNode is created if the key is missing from the dictionary.
+    Note: typing.DefaultDict was used instead of collections.defaultdict so type hinting can be implemented.
+    """
 
     def __missing__(self, key):
         node = OrbitalNode(name=key)
         self[key] = node  # Make sure the OrbitalNode object is added to this dictionary for future use.
         return node
 
+    def get_root_node(self) -> OrbitalNode:
+        for orbital_node in self.values():
+            while orbital_node.parent_orbit is not None:
+                orbital_node = orbital_node.parent_orbit
+            return orbital_node
+        raise ValueError(f'No root node, i.e. Center of Mass (COM), was detected in the {OrbitalNodeDict}')
 
-def build_orbital_node(orbit_list: List[DirectOrbit]) -> OrbitalNode:
+
+def build_orbital_node_dict(orbit_list: List[DirectOrbit]) -> OrbitalNodeDict:
+    """ Build a OrbitalNodeDict composed of OrbitalNode as values and orbit names as keys.
+    Each OrbitalNode will be linked to its parent and satellites.
+
+    :param orbit_list: List of DirectOrbit objects
+    :type orbit_list: List[DirectOrbit]
+    :return: The constructed OrbitalNodeDict
+    :rtype: OrbitalNodeDict
+    """
     # Dictionary for easy access to each OrbitalNode based on the objects name
     # Use the defaultdict to create an empty OrbitalNode if it does not exist.
-    node_dict: Dict[str, OrbitalNode] = OrbitalNodeDict()
+    node_dict = OrbitalNodeDict()
     for orbit in orbit_list:
         node0 = node_dict[orbit.m0]
         node1 = node_dict[orbit.m1]
@@ -41,11 +57,7 @@ def build_orbital_node(orbit_list: List[DirectOrbit]) -> OrbitalNode:
         # Assign node0 as the parent of node1
         node1.parent_orbit = node0
 
-    # Return the node that represents the Center of Mass (COM), i.e. where the parent_orbit is not assigned.
-    for node in node_dict.values():
-        if node.parent_orbit is None:
-            return node
-    raise ValueError(f'No Center of Mass (COM) was detected in the orbit_list: {orbit_list}')
+    return node_dict
 
 
 def count_direct_and_indirect_orbits(root_node: OrbitalNode) -> int:
@@ -148,14 +160,15 @@ class Day6Tests(unittest.TestCase):
         expected_num_orbits = 42
         map_list = ['COM)B', 'B)C', 'C)D', 'D)E', 'E)F', 'B)G', 'G)H', 'D)I', 'E)J', 'J)K', 'K)L']
         orbits = self.build_direct_orbit_list(map_list=map_list)
-        orbital_node = build_orbital_node(orbit_list=orbits)
-        self.assertEqual(orbital_node.name, 'COM')
-        self.assertIsNone(orbital_node.parent_orbit)
-        self.assertEqual(len(orbital_node.satellites), 1)
-        satellite = orbital_node.satellites[0]
+        orbital_node_dict = build_orbital_node_dict(orbit_list=orbits)
+        root_orbital_node = orbital_node_dict.get_root_node()
+        self.assertEqual(root_orbital_node.name, 'COM')
+        self.assertIsNone(root_orbital_node.parent_orbit)
+        self.assertEqual(len(root_orbital_node.satellites), 1)
+        satellite = root_orbital_node.satellites[0]
         self.assertEqual(satellite.name, 'B')
 
-        num_orbits = count_direct_and_indirect_orbits(root_node=orbital_node)
+        num_orbits = count_direct_and_indirect_orbits(root_node=root_orbital_node)
         self.assertEqual(num_orbits, expected_num_orbits)
 
     def test_part_2_example(self):
@@ -169,15 +182,15 @@ class Day6Tests(unittest.TestCase):
         expected_num_transfers = 4
         map_list = ['COM)B', 'B)C', 'C)D', 'D)E', 'E)F', 'B)G', 'G)H', 'D)I', 'E)J', 'J)K', 'K)L', 'K)YOU', 'I)SAN']
         orbits = self.build_direct_orbit_list(map_list=map_list)
-        orbital_node = build_orbital_node(orbit_list=orbits)
+        orbital_node_dict = build_orbital_node_dict(orbit_list=orbits)
 
         # Find the node with the name 'YOU'
-        you_node = find_specific_node(node_name='YOU', root_node=orbital_node)
+        you_node = orbital_node_dict['YOU']
         self.assertEqual(you_node.name, 'YOU')
         self.assertEqual(you_node.parent_orbit.name, 'K')
 
         # Find the node with the name 'SAN'
-        santa_node = find_specific_node(node_name='SAN', root_node=orbital_node)
+        santa_node = orbital_node_dict['SAN']
         self.assertEqual(santa_node.name, 'SAN')
         self.assertEqual(santa_node.parent_orbit.name, 'I')
 
@@ -214,17 +227,18 @@ def day_6(txt_path: Path) -> List[int]:
             orbits.append(direct_orbit)
 
     # Build a OrbitalNode tree and get the node that represents the Center of Mass (COM)
-    orbital_node = build_orbital_node(orbit_list=orbits)
+    orbital_node_dict = build_orbital_node_dict(orbit_list=orbits)
 
     # Part 1: What is the total number of direct and indirect orbits in your map data?
-    part_1_answer = count_direct_and_indirect_orbits(root_node=orbital_node)
+    root_node = orbital_node_dict.get_root_node()
+    part_1_answer = count_direct_and_indirect_orbits(root_node=root_node)
 
     # Part 2: What is the minimum number of orbital transfers required to move from the object YOU are orbiting to
     # the object SAN is orbiting? (Between the objects they are orbiting - not between YOU and SAN.)
 
     # Find the node with the name 'YOU' and 'SAN' and calculate the number of orbital transfers
-    you_node = find_specific_node(node_name='YOU', root_node=orbital_node)
-    santa_node = find_specific_node(node_name='SAN', root_node=orbital_node)
+    you_node = orbital_node_dict['YOU']
+    santa_node = orbital_node_dict['SAN']
     part_2_answer = find_num_orbital_transfers(node0=you_node, node1=santa_node)
 
     return [part_1_answer, part_2_answer]
