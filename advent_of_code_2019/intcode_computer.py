@@ -95,13 +95,21 @@ class IntCodeProgram(object):
         self.intcode: List[int] = intcode
         self.program_input: List[int] = list()
         self.program_output: List[int] = list()
+        self.i = 0
+        """The current index position within the intcode program."""
+        self.ran_to_completion = False
+        """This value will be False if the program was never run or if the program is waiting for an input variable. """
 
     @property
     def diagnostic_code(self) -> int:
         # An output followed immediately by a halt means the program finished.
         # If all outputs were zero except the diagnostic code, the diagnostic program ran successfully.
-        diagnostic_code = self.program_output[-1]
-        for code in self.program_output[0:-1]:
+
+        # Make sure the diagnostic code is removed from the program_output. If this is not done then feedback loop
+        # programs, which halt/wait for user input and have multiple outputs, will incorrectly have non-zero values
+        # left in their output.
+        diagnostic_code = self.program_output.pop()
+        for code in self.program_output:
             if code != 0:
                 raise ValueError(f'Diagnostic program failed. Not all outputs were zero '
                                  f'expect for final value: {self.program_output}')
@@ -117,9 +125,11 @@ class IntCodeProgram(object):
             raise ValueError(f'Unexpected {ParameterMode}: {mode}')
 
     def run(self):
-        i = 0  # Start at index 0
+        """Execute the intcode program or resume from the previous position if the program was waiting for
+        additional input. """
+
         while True:
-            value = self.intcode[i]
+            value = self.intcode[self.i]
             try:
                 instruction = Instruction.build_from_instruction_int(value)
             except ValueError:
@@ -127,7 +137,7 @@ class IntCodeProgram(object):
 
             # Extract the parameters used by this instruction
             # The number of parameters is determined by the specific opcode
-            param_i_start = i + 1
+            param_i_start = self.i + 1
             param_i_end = param_i_start + instruction.op_code.expected_parameter_count
             parameter_list = self.intcode[param_i_start: param_i_end]
             parameter_mode_list = instruction.parameter_mode_list
@@ -139,7 +149,8 @@ class IntCodeProgram(object):
 
             if instruction.op_code == OpCode.FINISHED:
                 # 99 means that the program is finished and should immediately halt.
-                break
+                self.ran_to_completion = True
+                return
             elif instruction.op_code in [OpCode.ADD, OpCode.MULTIPLY, OpCode.LESS_THAN, OpCode.EQUALS]:
                 # Resolve which argument values will be used in the math operation
                 # Should the value be intercepted as an index value or a raw value?
@@ -160,7 +171,7 @@ class IntCodeProgram(object):
                 result_parameter = parameter_list[2]
                 result_mode = parameter_mode_list[2]
                 if result_mode == ParameterMode.IMMEDIATE:
-                    address = i + 3  # TODO: Remove magic string
+                    address = self.i + 3  # TODO: Remove magic string
                 elif result_mode == ParameterMode.POSITION:
                     address = result_parameter
                 else:
@@ -177,14 +188,21 @@ class IntCodeProgram(object):
                     # Opcode 3 takes a single integer as input and saves it to the position given by its only parameter.
                     # For example, the instruction 3,50 would take an input value and store it at address 50.
                     if mode == ParameterMode.POSITION:
-                        self.intcode[parameter] = self.program_input.pop(0)
+                        try:
+                            self.intcode[parameter] = self.program_input.pop(0)
+                        except IndexError:
+                            # The program needs an input variable before it can continue. Break from the loop.
+                            # The run() function can be called again to resume where it left off when a variable
+                            # has been added to self.program_input
+                            self.ran_to_completion = False
+                            return
                     else:
                         raise ValueError(f'Unexpected {ParameterMode}: {mode}')
                 elif instruction.op_code == OpCode.READ_FROM_ADDRESS:
                     # Opcode 4 outputs the value of its only parameter. For example, the instruction 4,50 would output
                     # the value at address 50.
                     if mode == ParameterMode.IMMEDIATE:
-                        value = self.intcode[i + 1]  # TODO: Remove magic string
+                        value = self.intcode[self.i + 1]  # TODO: Remove magic string
                     elif mode == ParameterMode.POSITION:
                         value = self.intcode[parameter]
                     else:
@@ -201,13 +219,13 @@ class IntCodeProgram(object):
                     # second parameter. Otherwise, it does nothing.
                     if num0 != 0:
                         increment_by_parameter_count = False
-                        i = num1
+                        self.i = num1
                 elif instruction.op_code == OpCode.JUMP_IF_FALSE:
                     # If the first parameter is zero, it sets the instruction pointer to the value from the
                     # second parameter. Otherwise, it does nothing.
                     if num0 == 0:
                         increment_by_parameter_count = False
-                        i = num1
+                        self.i = num1
                 else:
                     raise ValueError(f'Unexpected {OpCode}: {instruction.op_code}')
             else:
@@ -215,4 +233,4 @@ class IntCodeProgram(object):
 
             if increment_by_parameter_count:
                 # Increment the program index based on the parameter count
-                i += 1 + instruction.op_code.expected_parameter_count
+                self.i += 1 + instruction.op_code.expected_parameter_count
