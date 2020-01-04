@@ -1,3 +1,5 @@
+import copy
+import math
 import re
 import unittest
 from itertools import combinations
@@ -103,6 +105,93 @@ def simulate(moon_list: List[Moon]) -> List[Moon]:
     return moon_list
 
 
+def calculate_steps_until_state_resets(moon_list: List[Moon]) -> int:
+    """ Use a faster method to determine when the moons will return to their initial state without simulating it.
+    If the planets are periodic for all three dimensions, then they will be periodic for a single dimension.
+        1) Find how long it takes for each dimension to revert to the initial position.
+        2) Calculate the least common multiple of the periods to determine when all 3 dimensions will reset.
+
+    :param moon_list: The list of Moon objects to simulate.
+    :type moon_list: List[Moon]
+    :return: The number of steps it would take for all moons to revert to their initial state.
+    :rtype: int
+    """
+    moon_list_t0 = copy.deepcopy(moon_list)
+
+    # The number of required steps for each attribute/dimension to reset to the t0 state.
+    num_req_step_per_attr = list()
+
+    # TODO: Is there a way to do the same thing without using setattr and getattr without code duplication?
+
+    for pos_attr_name, vel_attr_name in [('x', 'dx'), ('y', 'dy'), ('z', 'dz')]:
+        # The position and velocity attribute names
+
+        num_steps = 0
+        continue_simulation = True
+        while continue_simulation:
+            num_steps += 1
+
+            for moon0, moon1 in combinations(moon_list, r=2):
+                # if moon0.x < moon1.x:
+                #      moon0.dx += 1
+                #      moon1.dx -= 1
+                #  elif moon0.x > moon1.x:
+                #      moon0.dx -= 1
+                #      moon1.dx += 1
+                # The commented code above is equivalent to the code below
+                # when pos_attr_name == 'x' and vel_attr_name == 'dy'
+
+                vel_moon0 = getattr(moon0, vel_attr_name)
+                vel_moon1 = getattr(moon1, vel_attr_name)
+
+                pos_moon0 = getattr(moon0, pos_attr_name)
+                pos_moon1 = getattr(moon1, pos_attr_name)
+
+                if pos_moon0 < pos_moon1:
+                    vel_moon0 += 1
+                    vel_moon1 -= 1
+                elif pos_moon0 > pos_moon1:
+                    vel_moon0 -= 1
+                    vel_moon1 += 1
+
+                setattr(moon0, vel_attr_name, vel_moon0)
+                setattr(moon1, vel_attr_name, vel_moon1)
+
+            for moon in moon_list:
+                # moon.x += moon.dx
+                # moon.y += moon.dy
+                # moon.z += moon.dz
+                # The commented code above is equivalent to the code below
+                # when pos_attr_name == 'x' and vel_attr_name == 'dy'
+                vel = getattr(moon, vel_attr_name)
+                pos = getattr(moon, pos_attr_name)
+                setattr(moon, pos_attr_name, pos + vel)
+
+            # End the simulation if attribute/dimension position and velocity match the t0 state.
+            initial_states_matching = list()
+            for moon, moon_t0 in zip(moon_list, moon_list_t0):
+                match_pos = getattr(moon, pos_attr_name) == getattr(moon_t0, pos_attr_name)
+                match_vel = getattr(moon, vel_attr_name) == getattr(moon_t0, vel_attr_name)
+                is_match = match_pos and match_vel
+                initial_states_matching.append(is_match)
+            if all(initial_states_matching):
+                continue_simulation = False
+
+        num_req_step_per_attr.append(num_steps)
+
+    # Find the least common multiple of every value in the list
+    values = num_req_step_per_attr
+    while len(values) > 1:
+        lcm = compute_lcm(x=values.pop(), y=values.pop())
+        values.append(lcm)
+    return values.pop()
+
+
+def compute_lcm(x: int, y: int) -> int:
+    """Compute the least common multiple (LCM) of two numbers."""
+    return x * y // math.gcd(x, y)
+
+
 class Day12Tests(unittest.TestCase):
 
     def test_part1_example1(self):
@@ -199,23 +288,90 @@ class Day12Tests(unittest.TestCase):
         total_energy = sum([x.total_energy for x in moons_step100])
         self.assertEqual(total_energy, expected_energy)
 
+    def test_part2_example1(self):
+        # Determine the number of steps that must occur before all of the moons' positions and velocities exactly
+        # match a previous point in time.
+
+        # For example, the first example above takes 2772 steps before they exactly match a previous point in time;
+        # it eventually returns to the initial state:
+        expected_steps = 2772
+
+        # After 0 steps:
+        # pos=<x= -1, y=  0, z=  2>, vel=<x=  0, y=  0, z=  0>
+        # pos=<x=  2, y=-10, z= -7>, vel=<x=  0, y=  0, z=  0>
+        # pos=<x=  4, y= -8, z=  8>, vel=<x=  0, y=  0, z=  0>
+        # pos=<x=  3, y=  5, z= -1>, vel=<x=  0, y=  0, z=  0>
+        definition = [
+            '<x=-1, y=0, z=2>',
+            '<x=2, y=-10, z=-7>',
+            '<x=4, y=-8, z=8>',
+            '<x=3, y=5, z=-1>',
+        ]
+        moons_step_0 = [import_moon_from_string(definition=x) for x in definition]
+        moons_step_n = copy.deepcopy(moons_step_0)
+        steps = 0
+        positions_match_t0 = False
+        while not positions_match_t0:
+            steps += 1
+            moons_step_n = simulate(moon_list=moons_step_n)
+            positions_match_t0 = moons_step_n == moons_step_0
+            if steps > expected_steps:
+                break
+        self.assertListEqual(moons_step_0, moons_step_n)
+        self.assertEqual(expected_steps, steps)
+
+    def test_simulate_until_state_resets_example1(self):
+        definition = [
+            '<x=-1, y=0, z=2>',
+            '<x=2, y=-10, z=-7>',
+            '<x=4, y=-8, z=8>',
+            '<x=3, y=5, z=-1>',
+        ]
+        moons_step_0 = [import_moon_from_string(definition=x) for x in definition]
+        moons_step_n = copy.deepcopy(moons_step_0)
+        actual_steps = calculate_steps_until_state_resets(moon_list=moons_step_n)
+        expected_steps = 2772
+        self.assertEqual(expected_steps, actual_steps)
+
+    def test_simulate_until_state_resets_example2(self):
+        definition = [
+            '<x=-8, y=-10, z=0>',
+            '<x=5, y=5, z=10>',
+            '<x=2, y=-7, z=3>',
+            '<x=9, y=-8, z=-3>',
+        ]
+        moons_step_0 = [import_moon_from_string(definition=x) for x in definition]
+        moons_step_n = copy.deepcopy(moons_step_0)
+        actual_steps = calculate_steps_until_state_resets(moon_list=moons_step_n)
+        expected_steps = 4686774924
+        self.assertEqual(expected_steps, actual_steps)
+
 
 def day_12(txt_path: Path) -> list:
     # Load puzzle input. Multiple rows with moon position definitions on each row.
     with open(str(txt_path), mode='r', newline='') as f:
         rows = f.readlines()
 
-    moons = [import_moon_from_string(definition=x) for x in rows]
+    moons_step_0 = [import_moon_from_string(definition=x) for x in rows]
 
     # What is the total energy in the system after simulating the moons given in your scan for 1000 steps?
-    step = 0
-    while step < 1000:
-        step += 1
-        moons = simulate(moon_list=moons)
+    final_step_count = 1000
+    moons_step_1000 = copy.deepcopy(moons_step_0)
+    step_count = 0
+    while step_count < final_step_count:
+        step_count += 1
+        moons_step_1000 = simulate(moon_list=moons_step_1000)
 
     # Part 1: What is the total energy in the system?
-    part_1_answer = sum([x.total_energy for x in moons])
-    part_2_answer = None
+    part_1_answer = sum([x.total_energy for x in moons_step_1000])
+
+    # Determine the number of steps that must occur before all of the moons' positions and velocities exactly match a
+    # previous point in time.
+    moons_step_n = copy.deepcopy(moons_step_0)
+    steps_to_reset = calculate_steps_until_state_resets(moon_list=moons_step_n)
+
+    # Part 2: How many steps were required?
+    part_2_answer = steps_to_reset
 
     return [part_1_answer, part_2_answer]
 
