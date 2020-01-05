@@ -48,6 +48,15 @@ class ProductionMethod(object):
             output_quantity=int(output_quantity_str),
         )
 
+    @classmethod
+    def build_inf_oar_production(cls) -> 'ProductionMethod':
+        return ProductionMethod(
+            input_chemicals=[],
+            input_quantities=[],
+            output_chemical='ORE',
+            output_quantity=1,
+        )
+
 
 @dataclass
 class ChemicalSupply(object):
@@ -64,15 +73,6 @@ class ChemicalSupply(object):
 @dataclass
 class FuelFactory(object):
     inventory: Dict[str, ChemicalSupply] = field(default_factory=dict)
-
-    def __post_init__(self):
-        ore_production = ProductionMethod(
-            input_chemicals=[],
-            input_quantities=[],
-            output_chemical='ORE',
-            output_quantity=1,
-        )
-        self.add_production_method(method=ore_production)
 
     def add_production_method(self, method: ProductionMethod):
         chem_name = method.output_chemical
@@ -143,16 +143,10 @@ class Day14Tests(unittest.TestCase):
         ]
 
         fuel_factory = self.build_factory(reaction_str_list=reaction_str_list)
-
-        production_methods = [ProductionMethod.build_from_reaction_str(reaction=x) for x in reaction_str_list]
         self.assertEqual(
             len(fuel_factory.inventory),
             len(reaction_str_list) + 1,  # This should include the additional ProductionMethod for ORE
         )
-
-        fuel_factory = FuelFactory()
-        for method in production_methods:
-            fuel_factory.add_production_method(method=method)
 
         fuel_str = 'FUEL'
         fuel_supply = fuel_factory.inventory[fuel_str]
@@ -220,6 +214,8 @@ class Day14Tests(unittest.TestCase):
         fuel_factory = FuelFactory()
         for method in production_methods:
             fuel_factory.add_production_method(method=method)
+        # Add the production method that provides an infinite supply of oar
+        fuel_factory.add_production_method(method=ProductionMethod.build_inf_oar_production())
         return fuel_factory
 
 
@@ -229,9 +225,12 @@ def day_14(txt_path: Path) -> list:
         rows = [x.strip() for x in f.readlines()]
 
     production_methods = [ProductionMethod.build_from_reaction_str(reaction=x) for x in rows]
+
     fuel_factory = FuelFactory()
     for method in production_methods:
         fuel_factory.add_production_method(method=method)
+    # Add the production method that provides an infinite supply of oar
+    fuel_factory.add_production_method(method=ProductionMethod.build_inf_oar_production())
 
     # Part 1: What is the minimum amount of ORE required to produce exactly 1 FUEL?
     fuel_factory.produce_chemical(chemical_name='FUEL', count=1)
