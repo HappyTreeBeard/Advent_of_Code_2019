@@ -22,7 +22,9 @@ class Position(object):
     x: int
     y: int
 
-    def move(self, command: MovementCommand) -> 'Position':
+    def __add__(self, other) -> 'Position':
+        assert isinstance(other, MovementCommand)
+        command = other
         dx = 0
         dy = 0
         if command == MovementCommand.NORTH:
@@ -85,7 +87,7 @@ class DroidDispatcher(object):
             self.tile_map[droid.current_position] = Tile(position=droid.current_position, status=TileStatus.EMPTY)
         else:
             status_code = StatusCode(droid.program.diagnostic_code)
-            possible_position = droid.current_position.move(droid.prev_move_cmd)
+            possible_position = droid.current_position + droid.prev_move_cmd
 
             # The robot position did not update if it hit a wall.
             if status_code != StatusCode.WALL_HIT:
@@ -106,7 +108,7 @@ class DroidDispatcher(object):
 
         # Send a droid in each possible direction
         for move_command in MovementCommand:
-            next_position = droid.current_position.move(move_command)
+            next_position = droid.current_position + move_command
             if next_position in self.tile_map:
                 # This position in this direction has already been visited and should be skipped.
                 continue
@@ -144,7 +146,7 @@ def plot(dispatcher: DroidDispatcher):
         x_list.append(current_position.x)
         y_list.append(current_position.y)
         for move_cmd in successful_droid.move_history:
-            current_position = current_position.move(command=move_cmd)
+            current_position = current_position + move_cmd
             x_list.append(current_position.x)
             y_list.append(current_position.y)
         plt.plot(x_list, y_list)
