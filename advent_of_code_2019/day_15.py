@@ -60,7 +60,7 @@ class StatusCode(IntEnum):
     its new position is the location of the oxygen system."""
 
 
-class RepairDroid(object):
+class Droid(object):
     def __init__(self, intcode: List[int]):
         self.program = IntCodeProgram(intcode=intcode)
         self.current_position = Position(x=0, y=0)
@@ -75,16 +75,17 @@ class RepairDroid(object):
 
 class DroidDispatcher(object):
     def __init__(self):
-        self.tile_map: Dict[Position, Tile] = dict()
+        self.tile_map: Dict[Position, Tile] = defaultdict()
         self.queue = Queue()
-        self.successful_droids: List[RepairDroid] = list()
+        self.successful_droids: List[Droid] = list()
 
-    def search_for_oxygen_leak(self, droid: RepairDroid):
+    def search_for_oxygen_leak(self, droid: Droid):
         # Interpret the result from the previous droid movement
         # What was the last movement command send to this repair droid?
         if not droid.prev_move_cmd:
             # No commands have been send to this droid yet. We can assume the current position is empty
-            self.tile_map[droid.current_position] = Tile(position=droid.current_position, status=TileStatus.EMPTY)
+            if droid.current_position not in self.tile_map:
+                self.tile_map[droid.current_position] = Tile(position=droid.current_position, status=TileStatus.EMPTY)
         else:
             status_code = StatusCode(droid.program.diagnostic_code)
             possible_position = droid.current_position + droid.prev_move_cmd
@@ -100,7 +101,7 @@ class DroidDispatcher(object):
                 status = TileStatus.EMPTY
             elif status_code == StatusCode.OXYGEN_DETECTED:
                 status = TileStatus.OXYGEN
-                self.successful_droids.append(droid)
+                self.successful_droids.append(copy.deepcopy(droid))
             else:
                 raise ValueError(f'Unexpected {StatusCode}: {status_code}')
 
@@ -160,7 +161,7 @@ def day_15(txt_path: Path) -> list:
     # Convert the puzzle input into the Intcode software, a List[int]
     intcode = [int(x) for x in row.split(',')]
 
-    repair_droid = RepairDroid(intcode=intcode)
+    repair_droid = Droid(intcode=copy.copy(intcode))
     droid_dispatcher = DroidDispatcher()
     droid_dispatcher.search_for_oxygen_leak(droid=repair_droid)
 
