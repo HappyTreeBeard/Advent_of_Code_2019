@@ -1,6 +1,8 @@
 import copy
+import unittest
 from collections import defaultdict
-from enum import IntEnum, auto, Enum
+from datetime import timedelta
+from enum import IntEnum, Enum
 from pathlib import Path
 from queue import Queue
 from typing import List, Optional, Dict
@@ -39,12 +41,13 @@ class Position(object):
 
 
 class TileStatus(Enum):
-    EMPTY = auto()
-    WALL = auto()
-    OXYGEN = auto()
+    EMPTY = '.'
+    WALL = '#'
+    OXYGEN = 'O'
+    SPACE = ' '
 
 
-@dataclass(frozen=True, order=True)
+@dataclass
 class Tile(object):
     position: Position
     status: TileStatus
@@ -79,7 +82,7 @@ class DroidDispatcher(object):
         self.queue = Queue()
         self.successful_droids: List[Droid] = list()
 
-    def search_for_oxygen_leak(self, droid: Droid):
+    def run(self, droid: Droid):
         # Interpret the result from the previous droid movement
         # What was the last movement command send to this repair droid?
         if not droid.prev_move_cmd:
@@ -116,42 +119,60 @@ class DroidDispatcher(object):
 
             clone = copy.deepcopy(droid)
             clone.move(move_command=move_command)
-            self.search_for_oxygen_leak(droid=clone)
+            self.run(droid=clone)
 
 
-def plot(dispatcher: DroidDispatcher):
-    import matplotlib.pyplot as plt
-    tiles_by_status = defaultdict(list)
-    for tile in dispatcher.tile_map.values():
-        tiles_by_status[tile.status].append(tile)
+class FlowSimulator(object):
+    def __init__(self, tile_map: Dict[Position, Tile]):
+        self.tile_map: Dict[Position, Tile] = tile_map
 
-    for tile_status, tile_list in tiles_by_status.items():
-        if tile_status == TileStatus.EMPTY:
-            color = 'white'
-        elif tile_status == TileStatus.WALL:
-            color = 'black'
-        else:
-            color = 'green'
+    def calculate_time_to_fill(self) -> timedelta:
+        # Find all sources of oxygen
+        oxygen_front_positions = [x.position for x in self.tile_map.values() if x.status == TileStatus.OXYGEN]
+        delta_t = timedelta(minutes=0)
+        # Continue simulating the flow of oxygen until the entire map has been filled
+        while oxygen_front_positions:
+            oxygen_front_positions = self.simulate_flow(oxygen_front_positions)
+            if oxygen_front_positions:
+                delta_t += timedelta(minutes=1)
+        return delta_t
 
-        x_list = list()
-        y_list = list()
-        for tile in tile_list:
-            x_list.append(tile.position.x)
-            y_list.append(tile.position.y)
-        plt.scatter(x_list, y_list, c=color)
+    def simulate_flow(self, oxygen_front_positions: List[Position]) -> List[Position]:
+        new_oxygen_fronts = list()
+        for position in oxygen_front_positions:
+            # The oxygen can flow in any direction if it is empty
+            for flow_direction in MovementCommand:
+                next_position = position + flow_direction
+                if self.tile_map[next_position].status == TileStatus.EMPTY:
+                    # Fill this tile with oxygen and generate a new oxygen front
+                    self.tile_map[next_position].status = TileStatus.OXYGEN
+                    new_oxygen_fronts.append(next_position)
+        return new_oxygen_fronts
 
-    current_position = Position(x=0, y=0)
-    for successful_droid in dispatcher.successful_droids:
-        x_list = list()
-        y_list = list()
-        x_list.append(current_position.x)
-        y_list.append(current_position.y)
-        for move_cmd in successful_droid.move_history:
-            current_position = current_position + move_cmd
-            x_list.append(current_position.x)
-            y_list.append(current_position.y)
-        plt.plot(x_list, y_list)
-    plt.show()
+
+class Day15Tests(unittest.TestCase):
+
+    def test_part1_example1(self):
+        # Test oxygen flow
+        tile_str_list = [
+            ' ##   ',
+            '#..## ',
+            '#.#..#',
+            '#.O.# ',
+            ' ###  ',
+        ]
+        # So, in this example, all locations contain oxygen after 4 minutes.
+        expected = timedelta(minutes=4)
+        tile_dict = dict()
+        for y, tile_row in enumerate(tile_str_list):
+            for x, tile_str in enumerate(tile_row):
+                position = Position(x=x, y=y)
+                status = TileStatus(tile_str)
+                tile = Tile(position, status)
+                tile_dict[position] = tile
+        simulator = FlowSimulator(tile_map=tile_dict)
+        actual = simulator.calculate_time_to_fill()
+        self.assertEqual(actual, expected)
 
 
 def day_15(txt_path: Path) -> list:
@@ -163,14 +184,17 @@ def day_15(txt_path: Path) -> list:
 
     repair_droid = Droid(intcode=copy.copy(intcode))
     droid_dispatcher = DroidDispatcher()
-    droid_dispatcher.search_for_oxygen_leak(droid=repair_droid)
+    droid_dispatcher.run(droid=repair_droid)
 
     # Part 1: What is the fewest number of movement commands required to move the repair droid from its starting
     # position to the location of the oxygen system?
     steps_per_successful_droid = [len(x.move_history) for x in droid_dispatcher.successful_droids]
     part_1_answer = min(steps_per_successful_droid)
 
-    part_2_answer = None
+    # Part 2: How many minutes will it take to fill with oxygen?
+    simulator = FlowSimulator(tile_map=droid_dispatcher.tile_map)
+    time_delta = simulator.calculate_time_to_fill()
+    part_2_answer = int(time_delta / timedelta(minutes=1))
 
     return [part_1_answer, part_2_answer]
 
@@ -182,4 +206,6 @@ def main():
 
 
 if __name__ == '__main__':
+    SUITE = unittest.TestLoader().loadTestsFromTestCase(Day15Tests)
+    unittest.TextTestRunner(verbosity=2).run(SUITE)
     main()
